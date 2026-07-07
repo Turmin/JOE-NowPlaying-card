@@ -79,6 +79,14 @@ function getImageUrl($path) {
     return 'https://cdn-radio.dpgmedia.net/cover/w300' . $path;
 }
 
+function formatDuration(int $seconds): string {
+    $seconds = max(0, $seconds);
+    $minutes = intdiv($seconds, 60);
+    $remainingSeconds = $seconds % 60;
+
+    return sprintf('%d:%02d', $minutes, $remainingSeconds);
+}
+
 $json = getCachedJson($apiUrl, $cacheFile, $cacheTtl);
 $data = $json ? json_decode($json, true) : null;
 
@@ -87,6 +95,7 @@ $track = $data['track'] ?? null;
 $title = $track['title'] ?? null;
 $artist = $track['artist'] ?? null;
 $playedAt = $track['played_at'] ?? null;
+$duration = (int) ($track['raw']['duration'] ?? 0);
 
 $releaseYear = $track['raw']['release_year'] ?? null;
 $cover = getImageUrl(
@@ -96,17 +105,32 @@ $cover = getImageUrl(
 );
 
 $time = null;
+$endsAt = null;
+$elapsed = 0;
+$progress = 0;
+$durationLabel = $duration > 0 ? formatDuration($duration) : null;
 
 if ($playedAt) {
     try {
         $date = new DateTime($playedAt);
         $time = $date->format('H:i');
+        $endsAt = $duration > 0
+            ? (clone $date)->modify('+' . $duration . ' seconds')->format('H:i')
+            : null;
+        $elapsed = max(0, time() - $date->getTimestamp());
+        $progress = $duration > 0
+            ? min(100, max(0, ($elapsed / $duration) * 100))
+            : 0;
     } catch (Exception $exception) {
         $time = null;
+        $endsAt = null;
+        $elapsed = 0;
+        $progress = 0;
     }
 }
 
 $hasTrack = $track && $title && $artist;
+$hasProgress = $hasTrack && $playedAt && $duration > 0;
 ?>
 <!doctype html>
 <html lang="nl">
@@ -221,6 +245,118 @@ $hasTrack = $track && $title && $artist;
             background: #f4f4f4;
         }
 
+        .track-progress {
+            margin-top: 13px;
+            width: 100%;
+        }
+
+        .progress-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 6px;
+            font-size: 11px;
+            line-height: 1.2;
+            font-weight: 700;
+            color: #777777;
+        }
+
+        .progress-meta span {
+            min-width: 0;
+            white-space: nowrap;
+        }
+
+        .progress-meta span:first-child {
+            color: #e30613;
+        }
+
+        .progress-track {
+            position: relative;
+            width: 100%;
+            height: 10px;
+            border-radius: 999px;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0)),
+                #ececec;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+            overflow: hidden;
+        }
+
+        .progress-fill,
+        .progress-head {
+            animation-duration: var(--track-duration);
+            animation-delay: var(--track-delay);
+            animation-fill-mode: forwards;
+            animation-timing-function: linear;
+        }
+
+        .progress-fill {
+            position: absolute;
+            inset: 0;
+            transform: scaleX(0);
+            transform-origin: left center;
+            border-radius: inherit;
+            background:
+                linear-gradient(90deg, #e30613 0%, #ff3b30 58%, #ffca28 100%);
+            box-shadow: 0 0 14px rgba(227, 6, 19, 0.36);
+            animation-name: progress-grow;
+            overflow: hidden;
+        }
+
+        .progress-fill::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                105deg,
+                transparent 0%,
+                transparent 35%,
+                rgba(255, 255, 255, 0.58) 50%,
+                transparent 65%,
+                transparent 100%
+            );
+            animation: progress-shine 2.8s ease-in-out infinite;
+        }
+
+        .progress-head {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 16px;
+            height: 16px;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            background: #ffca28;
+            box-shadow: 0 2px 8px rgba(227, 6, 19, 0.38);
+            transform: translate(-50%, -50%);
+            animation-name: progress-head;
+        }
+
+        @keyframes progress-grow {
+            to {
+                transform: scaleX(1);
+            }
+        }
+
+        @keyframes progress-head {
+            to {
+                left: 100%;
+            }
+        }
+
+        @keyframes progress-shine {
+            0%,
+            35% {
+                transform: translateX(-100%);
+            }
+
+            75%,
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
         .empty-title {
             margin: 0;
             font-size: 18px;
@@ -260,6 +396,14 @@ $hasTrack = $track && $title && $artist;
                 font-size: 11px;
                 gap: 6px;
             }
+
+            .track-progress {
+                margin-top: 10px;
+            }
+
+            .progress-meta {
+                font-size: 10px;
+            }
         }
     </style>
 </head>
@@ -295,6 +439,24 @@ $hasTrack = $track && $title && $artist;
                     <span><?= e($releaseYear) ?></span>
                 <?php endif; ?>
             </div>
+
+            <?php if ($hasProgress): ?>
+                <div
+                    class="track-progress"
+                    role="img"
+                    aria-label="Voortgang <?= e(round($progress)) ?> procent van <?= e($durationLabel) ?>, eindigt rond <?= e($endsAt) ?>"
+                    style="--track-duration: <?= e($duration) ?>s; --track-delay: -<?= e(min($elapsed, $duration)) ?>s;"
+                >
+                    <div class="progress-meta">
+                        <span><?= e(round($progress)) ?>%</span>
+                        <span><?= e($durationLabel) ?> tot <?= e($endsAt) ?></span>
+                    </div>
+                    <div class="progress-track" aria-hidden="true">
+                        <div class="progress-fill"></div>
+                        <div class="progress-head"></div>
+                    </div>
+                </div>
+            <?php endif; ?>
         <?php else: ?>
             <p class="empty-title">Geen nummer beschikbaar</p>
             <p class="empty-text">De API gaf tijdelijk geen bruikbare trackdata terug.</p>
