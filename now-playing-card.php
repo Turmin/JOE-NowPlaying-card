@@ -355,7 +355,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
     </div>
 
     <div class="track-info">
-        <div class="label">Now on JOE</div>
+        <div class="label">Now playing on JOE</div>
 
         <?php if ($hasTrack): ?>
             <h1 class="title" title="<?= e($title) ?>">
