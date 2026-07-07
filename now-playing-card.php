@@ -240,27 +240,22 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
 
         .track-progress {
             margin-top: 12px;
-            width: 100%;
+            display: grid;
+            grid-template-columns: auto minmax(90px, 280px) auto;
+            align-items: center;
+            gap: 8px;
+            width: min(100%, 360px);
         }
 
-        .progress-meta {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 5px;
+        .progress-time {
             font-size: 11px;
             line-height: 1.2;
             font-weight: 700;
             color: #777777;
-        }
-
-        .progress-meta span {
-            min-width: 0;
             white-space: nowrap;
         }
 
-        .progress-meta span:first-child {
+        .progress-elapsed {
             color: #5f5f5f;
         }
 
@@ -337,7 +332,12 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
                 margin-top: 10px;
             }
 
-            .progress-meta {
+            .track-progress {
+                grid-template-columns: auto minmax(70px, 1fr) auto;
+                gap: 6px;
+            }
+
+            .progress-time {
                 font-size: 10px;
             }
         }
@@ -385,15 +385,15 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
                     aria-valuemax="<?= e($duration) ?>"
                     aria-valuenow="<?= e(min($elapsed, $duration)) ?>"
                     aria-valuetext="<?= e($elapsedLabel) ?> of <?= e($durationLabel) ?>"
+                    data-duration="<?= e($duration) ?>"
+                    data-elapsed="<?= e(min($elapsed, $duration)) ?>"
                     style="--track-duration: <?= e($duration) ?>s; --track-delay: -<?= e(min($elapsed, $duration)) ?>s;"
                 >
-                    <div class="progress-meta">
-                        <span><?= e($elapsedLabel) ?></span>
-                        <span><?= e($durationLabel) ?></span>
-                    </div>
+                    <span class="progress-time progress-elapsed"><?= e($elapsedLabel) ?></span>
                     <div class="progress-track" aria-hidden="true">
                         <div class="progress-fill"></div>
                     </div>
+                    <span class="progress-time"><?= e($durationLabel) ?></span>
                 </div>
             <?php endif; ?>
         <?php else: ?>
@@ -402,6 +402,47 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
         <?php endif; ?>
     </div>
 </article>
+
+<script>
+    (function () {
+        var progress = document.querySelector('.track-progress');
+
+        if (!progress) {
+            return;
+        }
+
+        var elapsedLabel = progress.querySelector('.progress-elapsed');
+        var duration = parseInt(progress.getAttribute('data-duration') || '0', 10);
+        var initialElapsed = parseInt(progress.getAttribute('data-elapsed') || '0', 10);
+
+        if (!elapsedLabel || !duration || !isFinite(duration)) {
+            return;
+        }
+
+        var startedAt = Date.now() - (initialElapsed * 1000);
+
+        function formatDuration(seconds) {
+            var safeSeconds = Math.max(0, Math.min(duration, seconds));
+            var minutes = Math.floor(safeSeconds / 60);
+            var remainingSeconds = safeSeconds % 60;
+            var paddedSeconds = remainingSeconds < 10 ? '0' + remainingSeconds : String(remainingSeconds);
+
+            return String(minutes) + ':' + paddedSeconds;
+        }
+
+        function updateElapsed() {
+            var elapsed = Math.min(duration, Math.floor((Date.now() - startedAt) / 1000));
+            var label = formatDuration(elapsed);
+
+            elapsedLabel.textContent = label;
+            progress.setAttribute('aria-valuenow', String(elapsed));
+            progress.setAttribute('aria-valuetext', label + ' of ' + formatDuration(duration));
+        }
+
+        updateElapsed();
+        window.setInterval(updateElapsed, 1000);
+    }());
+</script>
 
 </body>
 </html>
