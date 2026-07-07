@@ -55,7 +55,7 @@ function getCachedJson(string $apiUrl, string $cacheFile, int $cacheTtl): ?strin
         return $json;
     }
 
-    // Fallback: als API faalt, gebruik oude cache als die bestaat
+    // Fallback: if the API fails, use the stale cache when available.
     if ($cacheExists) {
         return file_get_contents($cacheFile);
     }
@@ -105,27 +105,20 @@ $cover = getImageUrl(
 );
 
 $time = null;
-$endsAt = null;
 $elapsed = 0;
-$progress = 0;
+$elapsedLabel = null;
 $durationLabel = $duration > 0 ? formatDuration($duration) : null;
 
 if ($playedAt) {
     try {
         $date = new DateTime($playedAt);
         $time = $date->format('H:i');
-        $endsAt = $duration > 0
-            ? (clone $date)->modify('+' . $duration . ' seconds')->format('H:i')
-            : null;
         $elapsed = max(0, time() - $date->getTimestamp());
-        $progress = $duration > 0
-            ? min(100, max(0, ($elapsed / $duration) * 100))
-            : 0;
+        $elapsedLabel = $duration > 0 ? formatDuration(min($elapsed, $duration)) : null;
     } catch (Exception $exception) {
         $time = null;
-        $endsAt = null;
         $elapsed = 0;
-        $progress = 0;
+        $elapsedLabel = null;
     }
 }
 
@@ -133,7 +126,7 @@ $hasTrack = $track && $title && $artist;
 $hasProgress = $hasTrack && $playedAt && $duration > 0;
 ?>
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -246,7 +239,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
         }
 
         .track-progress {
-            margin-top: 13px;
+            margin-top: 12px;
             width: 100%;
         }
 
@@ -255,7 +248,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            margin-bottom: 6px;
+            margin-bottom: 5px;
             font-size: 11px;
             line-height: 1.2;
             font-weight: 700;
@@ -268,92 +261,35 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
         }
 
         .progress-meta span:first-child {
-            color: #e30613;
+            color: #5f5f5f;
         }
 
         .progress-track {
             position: relative;
             width: 100%;
-            height: 10px;
+            height: 6px;
             border-radius: 999px;
-            background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0)),
-                #ececec;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+            background: #e5e5e5;
             overflow: hidden;
         }
 
-        .progress-fill,
-        .progress-head {
+        .progress-fill {
             animation-duration: var(--track-duration);
             animation-delay: var(--track-delay);
             animation-fill-mode: forwards;
             animation-timing-function: linear;
-        }
-
-        .progress-fill {
             position: absolute;
             inset: 0;
             transform: scaleX(0);
             transform-origin: left center;
             border-radius: inherit;
-            background:
-                linear-gradient(90deg, #e30613 0%, #ff3b30 58%, #ffca28 100%);
-            box-shadow: 0 0 14px rgba(227, 6, 19, 0.36);
+            background: #b64b52;
             animation-name: progress-grow;
-            overflow: hidden;
-        }
-
-        .progress-fill::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(
-                105deg,
-                transparent 0%,
-                transparent 35%,
-                rgba(255, 255, 255, 0.58) 50%,
-                transparent 65%,
-                transparent 100%
-            );
-            animation: progress-shine 2.8s ease-in-out infinite;
-        }
-
-        .progress-head {
-            position: absolute;
-            top: 50%;
-            left: 0;
-            width: 16px;
-            height: 16px;
-            border: 3px solid #ffffff;
-            border-radius: 50%;
-            background: #ffca28;
-            box-shadow: 0 2px 8px rgba(227, 6, 19, 0.38);
-            transform: translate(-50%, -50%);
-            animation-name: progress-head;
         }
 
         @keyframes progress-grow {
             to {
                 transform: scaleX(1);
-            }
-        }
-
-        @keyframes progress-head {
-            to {
-                left: 100%;
-            }
-        }
-
-        @keyframes progress-shine {
-            0%,
-            35% {
-                transform: translateX(-100%);
-            }
-
-            75%,
-            100% {
-                transform: translateX(100%);
             }
         }
 
@@ -412,14 +348,14 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
 <article class="now-playing-card">
     <div class="cover">
         <?php if ($cover): ?>
-            <img src="<?= e($cover) ?>" alt="Cover van <?= e($title ?? 'huidig nummer') ?>">
+            <img src="<?= e($cover) ?>" alt="Cover for <?= e($title ?? 'the current track') ?>">
         <?php else: ?>
             <div class="cover-placeholder">♪</div>
         <?php endif; ?>
     </div>
 
     <div class="track-info">
-        <div class="label">Nu op JOE</div>
+        <div class="label">Now on JOE</div>
 
         <?php if ($hasTrack): ?>
             <h1 class="title" title="<?= e($title) ?>">
@@ -432,7 +368,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
 
             <div class="meta">
                 <?php if ($time): ?>
-                    <span>Gestart om <?= e($time) ?></span>
+                    <span>Started at <?= e($time) ?></span>
                 <?php endif; ?>
 
                 <?php if ($releaseYear): ?>
@@ -443,23 +379,26 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
             <?php if ($hasProgress): ?>
                 <div
                     class="track-progress"
-                    role="img"
-                    aria-label="Voortgang <?= e(round($progress)) ?> procent van <?= e($durationLabel) ?>, eindigt rond <?= e($endsAt) ?>"
+                    role="progressbar"
+                    aria-label="Track progress"
+                    aria-valuemin="0"
+                    aria-valuemax="<?= e($duration) ?>"
+                    aria-valuenow="<?= e(min($elapsed, $duration)) ?>"
+                    aria-valuetext="<?= e($elapsedLabel) ?> of <?= e($durationLabel) ?>"
                     style="--track-duration: <?= e($duration) ?>s; --track-delay: -<?= e(min($elapsed, $duration)) ?>s;"
                 >
                     <div class="progress-meta">
-                        <span><?= e(round($progress)) ?>%</span>
-                        <span><?= e($durationLabel) ?> tot <?= e($endsAt) ?></span>
+                        <span><?= e($elapsedLabel) ?></span>
+                        <span><?= e($durationLabel) ?></span>
                     </div>
                     <div class="progress-track" aria-hidden="true">
                         <div class="progress-fill"></div>
-                        <div class="progress-head"></div>
                     </div>
                 </div>
             <?php endif; ?>
         <?php else: ?>
-            <p class="empty-title">Geen nummer beschikbaar</p>
-            <p class="empty-text">De API gaf tijdelijk geen bruikbare trackdata terug.</p>
+            <p class="empty-title">No track available</p>
+            <p class="empty-text">The API did not return usable track data.</p>
         <?php endif; ?>
     </div>
 </article>
