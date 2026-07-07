@@ -55,7 +55,7 @@ function getCachedJson(string $apiUrl, string $cacheFile, int $cacheTtl): ?strin
         return $json;
     }
 
-    // Fallback: als API faalt, gebruik oude cache als die bestaat
+    // Fallback: if the API fails, use the stale cache when available.
     if ($cacheExists) {
         return file_get_contents($cacheFile);
     }
@@ -79,6 +79,14 @@ function getImageUrl($path) {
     return 'https://cdn-radio.dpgmedia.net/cover/w300' . $path;
 }
 
+function formatDuration(int $seconds): string {
+    $seconds = max(0, $seconds);
+    $minutes = intdiv($seconds, 60);
+    $remainingSeconds = $seconds % 60;
+
+    return sprintf('%d:%02d', $minutes, $remainingSeconds);
+}
+
 $json = getCachedJson($apiUrl, $cacheFile, $cacheTtl);
 $data = $json ? json_decode($json, true) : null;
 
@@ -87,6 +95,7 @@ $track = $data['track'] ?? null;
 $title = $track['title'] ?? null;
 $artist = $track['artist'] ?? null;
 $playedAt = $track['played_at'] ?? null;
+$duration = (int) ($track['raw']['duration'] ?? 0);
 
 $releaseYear = $track['raw']['release_year'] ?? null;
 $cover = getImageUrl(
@@ -96,20 +105,28 @@ $cover = getImageUrl(
 );
 
 $time = null;
+$elapsed = 0;
+$elapsedLabel = null;
+$durationLabel = $duration > 0 ? formatDuration($duration) : null;
 
 if ($playedAt) {
     try {
         $date = new DateTime($playedAt);
         $time = $date->format('H:i');
+        $elapsed = max(0, time() - $date->getTimestamp());
+        $elapsedLabel = $duration > 0 ? formatDuration(min($elapsed, $duration)) : null;
     } catch (Exception $exception) {
         $time = null;
+        $elapsed = 0;
+        $elapsedLabel = null;
     }
 }
 
 $hasTrack = $track && $title && $artist;
+$hasProgress = $hasTrack && $playedAt && $duration > 0;
 ?>
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -221,6 +238,56 @@ $hasTrack = $track && $title && $artist;
             background: #f4f4f4;
         }
 
+        .track-progress {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: auto minmax(90px, 280px) auto;
+            align-items: center;
+            gap: 8px;
+            width: min(100%, 360px);
+        }
+
+        .progress-time {
+            font-size: 11px;
+            line-height: 1.2;
+            font-weight: 700;
+            color: #777777;
+            white-space: nowrap;
+        }
+
+        .progress-elapsed {
+            color: #5f5f5f;
+        }
+
+        .progress-track {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            border-radius: 999px;
+            background: #e5e5e5;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            animation-duration: var(--track-duration);
+            animation-delay: var(--track-delay);
+            animation-fill-mode: forwards;
+            animation-timing-function: linear;
+            position: absolute;
+            inset: 0;
+            transform: scaleX(0);
+            transform-origin: left center;
+            border-radius: inherit;
+            background: #b64b52;
+            animation-name: progress-grow;
+        }
+
+        @keyframes progress-grow {
+            to {
+                transform: scaleX(1);
+            }
+        }
+
         .empty-title {
             margin: 0;
             font-size: 18px;
@@ -260,6 +327,19 @@ $hasTrack = $track && $title && $artist;
                 font-size: 11px;
                 gap: 6px;
             }
+
+            .track-progress {
+                margin-top: 10px;
+            }
+
+            .track-progress {
+                grid-template-columns: auto minmax(70px, 1fr) auto;
+                gap: 6px;
+            }
+
+            .progress-time {
+                font-size: 10px;
+            }
         }
     </style>
 </head>
@@ -268,14 +348,14 @@ $hasTrack = $track && $title && $artist;
 <article class="now-playing-card">
     <div class="cover">
         <?php if ($cover): ?>
-            <img src="<?= e($cover) ?>" alt="Cover van <?= e($title ?? 'huidig nummer') ?>">
+            <img src="<?= e($cover) ?>" alt="Cover for <?= e($title ?? 'the current track') ?>">
         <?php else: ?>
             <div class="cover-placeholder">♪</div>
         <?php endif; ?>
     </div>
 
     <div class="track-info">
-        <div class="label">Nu op JOE</div>
+        <div class="label">Now playing on JOE</div>
 
         <?php if ($hasTrack): ?>
             <h1 class="title" title="<?= e($title) ?>">
@@ -288,19 +368,81 @@ $hasTrack = $track && $title && $artist;
 
             <div class="meta">
                 <?php if ($time): ?>
-                    <span>Gestart om <?= e($time) ?></span>
+                    <span>Started at <?= e($time) ?></span>
                 <?php endif; ?>
 
                 <?php if ($releaseYear): ?>
                     <span><?= e($releaseYear) ?></span>
                 <?php endif; ?>
             </div>
+
+            <?php if ($hasProgress): ?>
+                <div
+                    class="track-progress"
+                    role="progressbar"
+                    aria-label="Track progress"
+                    aria-valuemin="0"
+                    aria-valuemax="<?= e($duration) ?>"
+                    aria-valuenow="<?= e(min($elapsed, $duration)) ?>"
+                    aria-valuetext="<?= e($elapsedLabel) ?> of <?= e($durationLabel) ?>"
+                    data-duration="<?= e($duration) ?>"
+                    data-elapsed="<?= e(min($elapsed, $duration)) ?>"
+                    style="--track-duration: <?= e($duration) ?>s; --track-delay: -<?= e(min($elapsed, $duration)) ?>s;"
+                >
+                    <span class="progress-time progress-elapsed"><?= e($elapsedLabel) ?></span>
+                    <div class="progress-track" aria-hidden="true">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <span class="progress-time"><?= e($durationLabel) ?></span>
+                </div>
+            <?php endif; ?>
         <?php else: ?>
-            <p class="empty-title">Geen nummer beschikbaar</p>
-            <p class="empty-text">De API gaf tijdelijk geen bruikbare trackdata terug.</p>
+            <p class="empty-title">No track available</p>
+            <p class="empty-text">The API did not return usable track data.</p>
         <?php endif; ?>
     </div>
 </article>
+
+<script>
+    (function () {
+        var progress = document.querySelector('.track-progress');
+
+        if (!progress) {
+            return;
+        }
+
+        var elapsedLabel = progress.querySelector('.progress-elapsed');
+        var duration = parseInt(progress.getAttribute('data-duration') || '0', 10);
+        var initialElapsed = parseInt(progress.getAttribute('data-elapsed') || '0', 10);
+
+        if (!elapsedLabel || !duration || !isFinite(duration)) {
+            return;
+        }
+
+        var startedAt = Date.now() - (initialElapsed * 1000);
+
+        function formatDuration(seconds) {
+            var safeSeconds = Math.max(0, Math.min(duration, seconds));
+            var minutes = Math.floor(safeSeconds / 60);
+            var remainingSeconds = safeSeconds % 60;
+            var paddedSeconds = remainingSeconds < 10 ? '0' + remainingSeconds : String(remainingSeconds);
+
+            return String(minutes) + ':' + paddedSeconds;
+        }
+
+        function updateElapsed() {
+            var elapsed = Math.min(duration, Math.floor((Date.now() - startedAt) / 1000));
+            var label = formatDuration(elapsed);
+
+            elapsedLabel.textContent = label;
+            progress.setAttribute('aria-valuenow', String(elapsed));
+            progress.setAttribute('aria-valuetext', label + ' of ' + formatDuration(duration));
+        }
+
+        updateElapsed();
+        window.setInterval(updateElapsed, 1000);
+    }());
+</script>
 
 </body>
 </html>
