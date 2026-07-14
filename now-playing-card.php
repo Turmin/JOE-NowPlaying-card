@@ -1,6 +1,6 @@
 <?php
-$apiUrl = 'https://joe-api.turmin.com/now-playing';
-$cacheFile = __DIR__ . '/now-playing-cache.json';
+$apiBaseUrl = 'https://joe-api.turmin.com/playlist';
+$defaultStation = 'joe_nl';
 $cacheTtl = 10; // seconds
 
 function startsWith($string, $prefix) {
@@ -9,6 +9,54 @@ function startsWith($string, $prefix) {
 
 function e($value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function getRequestedStation(string $defaultStation): string {
+    $station = $_GET['station'] ?? $defaultStation;
+
+    if (!is_string($station)) {
+        return $defaultStation;
+    }
+
+    $station = strtolower(trim($station));
+
+    if ($station === '' || !preg_match('/^[a-z0-9_-]+$/', $station)) {
+        return $defaultStation;
+    }
+
+    return $station;
+}
+
+function getStationLabel(string $station): string {
+    $stationLabels = [
+        'joe_nl' => 'JOE',
+        'qmusic_nl' => 'Qmusic',
+    ];
+
+    if (isset($stationLabels[$station])) {
+        return $stationLabels[$station];
+    }
+
+    $parts = preg_split('/[_-]+/', $station) ?: [];
+    $parts = array_map(static function (string $part): string {
+        if (strlen($part) === 2) {
+            return strtoupper($part);
+        }
+
+        return strtoupper(substr($part, 0, 1)) . substr($part, 1);
+    }, $parts);
+
+    return implode(' ', array_filter($parts, static function (string $part): bool {
+        return $part !== '';
+    }));
+}
+
+function getStationCacheFile(string $station, string $defaultStation): string {
+    if ($station === $defaultStation) {
+        return __DIR__ . '/now-playing-cache.json';
+    }
+
+    return __DIR__ . '/now-playing-cache-' . $station . '.json';
 }
 
 function fetchJsonWithCurl(string $url, int $timeout = 3): ?string {
@@ -87,10 +135,15 @@ function formatDuration(int $seconds): string {
     return sprintf('%d:%02d', $minutes, $remainingSeconds);
 }
 
+$requestedStation = getRequestedStation($defaultStation);
+$stationLabel = getStationLabel($requestedStation);
+$apiUrl = $apiBaseUrl . '?' . http_build_query(['station' => $requestedStation]);
+$cacheFile = getStationCacheFile($requestedStation, $defaultStation);
+
 $json = getCachedJson($apiUrl, $cacheFile, $cacheTtl);
 $data = $json ? json_decode($json, true) : null;
 
-$track = $data['track'] ?? null;
+$track = $data['track'] ?? $data['tracks'][0] ?? null;
 
 $title = $track['title'] ?? null;
 $artist = $track['artist'] ?? null;
@@ -131,7 +184,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="refresh" content="10">
-    <title>Now Playing</title>
+    <title>Now Playing on <?= e($stationLabel) ?></title>
 
     <style>
         * {
@@ -355,7 +408,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
     </div>
 
     <div class="track-info">
-        <div class="label">Now playing on JOE</div>
+        <div class="label">Now playing on <?= e($stationLabel) ?></div>
 
         <?php if ($hasTrack): ?>
             <h1 class="title" title="<?= e($title) ?>">
