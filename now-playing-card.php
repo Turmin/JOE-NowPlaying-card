@@ -27,6 +27,16 @@ function getRequestedStation(string $defaultStation): string {
     return $station;
 }
 
+function isDarkModeRequested(): bool {
+    if (!array_key_exists('darkmode', $_GET) || !is_string($_GET['darkmode'])) {
+        return false;
+    }
+
+    $darkMode = strtolower(trim($_GET['darkmode']));
+
+    return $darkMode === '' || in_array($darkMode, ['true', 'yes', 'on'], true);
+}
+
 function getStationLabel(string $station): string {
     $stationLabels = [
         'joe_nl' => 'JOE',
@@ -136,6 +146,7 @@ function formatDuration(int $seconds): string {
 }
 
 $requestedStation = getRequestedStation($defaultStation);
+$darkMode = isDarkModeRequested();
 $stationLabel = getStationLabel($requestedStation);
 $apiUrl = $apiBaseUrl . '?' . http_build_query(['station' => $requestedStation]);
 $cacheFile = getStationCacheFile($requestedStation, $defaultStation);
@@ -186,219 +197,11 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
     <meta http-equiv="refresh" content="10">
     <title>Now Playing on <?= e($stationLabel) ?></title>
 
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-
-        .now-playing-card {
-            width: 100%;
-            height: 100%;
-            max-width: none;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 14px;
-            background: #ffffff;
-            color: #151515;
-            overflow: hidden;
-        }
-
-        .cover {
-            flex: 0 0 112px;
-            width: 112px;
-            height: 112px;
-            border-radius: 14px;
-            overflow: hidden;
-            background: #eeeeee;
-        }
-
-        .cover img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-
-        .cover-placeholder {
-            width: 100%;
-            height: 100%;
-            display: grid;
-            place-items: center;
-            font-size: 32px;
-            color: #777777;
-        }
-
-        .track-info {
-            min-width: 0;
-            flex: 1;
-        }
-
-        .label {
-            margin-bottom: 6px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #e30613;
-        }
-
-        .title {
-            margin: 0 0 5px;
-            font-size: 22px;
-            line-height: 1.15;
-            font-weight: 800;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .artist {
-            margin: 0;
-            font-size: 16px;
-            line-height: 1.25;
-            font-weight: 600;
-            color: #333333;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 12px;
-            font-size: 12px;
-            color: #777777;
-        }
-
-        .meta span {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: #f4f4f4;
-        }
-
-        .track-progress {
-            margin-top: 12px;
-            display: grid;
-            grid-template-columns: auto minmax(90px, 280px) auto;
-            align-items: center;
-            gap: 8px;
-            width: min(100%, 360px);
-        }
-
-        .progress-time {
-            font-size: 11px;
-            line-height: 1.2;
-            font-weight: 700;
-            color: #777777;
-            white-space: nowrap;
-        }
-
-        .progress-elapsed {
-            color: #5f5f5f;
-        }
-
-        .progress-track {
-            position: relative;
-            width: 100%;
-            height: 6px;
-            border-radius: 999px;
-            background: #e5e5e5;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            animation-duration: var(--track-duration);
-            animation-delay: var(--track-delay);
-            animation-fill-mode: forwards;
-            animation-timing-function: linear;
-            position: absolute;
-            inset: 0;
-            transform: scaleX(0);
-            transform-origin: left center;
-            border-radius: inherit;
-            background: #b64b52;
-            animation-name: progress-grow;
-        }
-
-        @keyframes progress-grow {
-            to {
-                transform: scaleX(1);
-            }
-        }
-
-        .empty-title {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 700;
-        }
-
-        .empty-text {
-            margin: 6px 0 0;
-            font-size: 13px;
-            color: #777777;
-        }
-
-        @media (max-width: 360px) {
-            .now-playing-card {
-                gap: 12px;
-                padding: 12px;
-                border-radius: 14px;
-            }
-
-            .cover {
-                flex-basis: 86px;
-                width: 86px;
-                height: 86px;
-                border-radius: 12px;
-            }
-
-            .title {
-                font-size: 18px;
-            }
-
-            .artist {
-                font-size: 14px;
-            }
-
-            .meta {
-                margin-top: 8px;
-                font-size: 11px;
-                gap: 6px;
-            }
-
-            .track-progress {
-                margin-top: 10px;
-            }
-
-            .track-progress {
-                grid-template-columns: auto minmax(70px, 1fr) auto;
-                gap: 6px;
-            }
-
-            .progress-time {
-                font-size: 10px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="static/css/now-playing-card.css">
 </head>
 <body>
 
-<article class="now-playing-card">
+<article class="now-playing-card<?= $darkMode ? ' dark-mode' : '' ?>">
     <div class="cover">
         <?php if ($cover): ?>
             <img src="<?= e($cover) ?>" alt="Cover for <?= e($title ?? 'the current track') ?>">
@@ -456,46 +259,7 @@ $hasProgress = $hasTrack && $playedAt && $duration > 0;
     </div>
 </article>
 
-<script>
-    (function () {
-        var progress = document.querySelector('.track-progress');
-
-        if (!progress) {
-            return;
-        }
-
-        var elapsedLabel = progress.querySelector('.progress-elapsed');
-        var duration = parseInt(progress.getAttribute('data-duration') || '0', 10);
-        var initialElapsed = parseInt(progress.getAttribute('data-elapsed') || '0', 10);
-
-        if (!elapsedLabel || !duration || !isFinite(duration)) {
-            return;
-        }
-
-        var startedAt = Date.now() - (initialElapsed * 1000);
-
-        function formatDuration(seconds) {
-            var safeSeconds = Math.max(0, Math.min(duration, seconds));
-            var minutes = Math.floor(safeSeconds / 60);
-            var remainingSeconds = safeSeconds % 60;
-            var paddedSeconds = remainingSeconds < 10 ? '0' + remainingSeconds : String(remainingSeconds);
-
-            return String(minutes) + ':' + paddedSeconds;
-        }
-
-        function updateElapsed() {
-            var elapsed = Math.min(duration, Math.floor((Date.now() - startedAt) / 1000));
-            var label = formatDuration(elapsed);
-
-            elapsedLabel.textContent = label;
-            progress.setAttribute('aria-valuenow', String(elapsed));
-            progress.setAttribute('aria-valuetext', label + ' of ' + formatDuration(duration));
-        }
-
-        updateElapsed();
-        window.setInterval(updateElapsed, 1000);
-    }());
-</script>
+<script src="static/js/now-playing-card.js"></script>
 
 </body>
 </html>
