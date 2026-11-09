@@ -2,6 +2,8 @@
 $apiBaseUrl = 'https://joe-api.turmin.com/playlist';
 $defaultStation = 'joe_nl';
 $cacheTtl = 10; // seconds
+$maxStationLength = 32;
+$maxStationCacheFiles = 25; // upper limit for now-playing-cache-<station>.json files
 
 function startsWith($string, $prefix) {
     return strpos($string, $prefix) === 0;
@@ -20,7 +22,7 @@ function getRequestedStation(string $defaultStation): string {
 
     $station = strtolower(trim($station));
 
-    if ($station === '' || !preg_match('/^[a-z0-9_-]+$/', $station)) {
+    if ($station === '' || strlen($station) > $GLOBALS['maxStationLength'] || !preg_match('/^[a-z0-9_-]+$/', $station)) {
         return $defaultStation;
     }
 
@@ -109,7 +111,16 @@ function getCachedJson(string $apiUrl, string $cacheFile, int $cacheTtl): ?strin
     $json = fetchJsonWithCurl($apiUrl);
 
     if ($json !== null) {
-        file_put_contents($cacheFile, $json, LOCK_EX);
+        // Never create more cache files than the limit, so arbitrary station
+        // names in the URL cannot fill the disk. Existing files stay in use.
+        $stationCacheFiles = glob(__DIR__ . '/now-playing-cache-*.json') ?: [];
+
+        $isDefaultCacheFile = basename($cacheFile) === 'now-playing-cache.json';
+
+        if ($cacheExists || $isDefaultCacheFile || count($stationCacheFiles) < $GLOBALS['maxStationCacheFiles']) {
+            file_put_contents($cacheFile, $json, LOCK_EX);
+        }
+
         return $json;
     }
 
